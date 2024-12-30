@@ -60,6 +60,10 @@ class SFSContainer:
         self.fd.write(buf)
 
     def get_tree(self) -> Iterator[DirectoryTree]:
+        for _, dt in self.enumerate_tree():
+            yield dt
+
+    def enumerate_tree(self) -> Iterator[tuple[int, DirectoryTree]]:
         nco = self._hdr.dto
         rem_entries = self._hdr.n_entr
         while 1:
@@ -67,7 +71,7 @@ class SFSContainer:
             dt = DirectoryTree(chunk, rem_entries)
             rem_entries -= len(dt.files)
             assert rem_entries >= 0
-            yield dt
+            yield nco, dt
             if rem_entries == 0 or nco == dt.nnco or dt.nnco <= 0:
                 break
             nco = dt.nnco
@@ -81,6 +85,14 @@ class SFSContainer:
         # deflate if needed
         if compression_level is not None:
             data = aacs_deflate(data, compression_level)
+
+        for chunk_idx, dt in self.enumerate_tree():
+            for f in dt.files:
+                if f.filename == file.filename:
+                    # must rewrite this directorytree with the updated size
+                    f.size = len(data)
+                    b = dt.serialize(self._hdr.chunk_size)
+                    self._put_chunk(chunk_idx, b)
 
         chunks = make_chunks(data, self._hdr.chunk_size, key)
 

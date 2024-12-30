@@ -58,7 +58,7 @@ def test_sfs_replace_file() -> None:
                     sfs.write_file(f, layout, b'45654hKL5-GFD1326lvmaQQ')
     with open(pat1, 'rb') as fd:
         d = hashlib.md5(fd.read(), usedforsecurity=False).digest()
-    assert d.hex() == '27bf047f99415f1efe6f6349febd8df5'
+    assert d.hex() == 'cd486e05a9a8a319ad67fd5dd63f15c7'
     os.unlink(pat1)
 
 

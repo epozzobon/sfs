@@ -31,7 +31,7 @@ from sfs.wrongaes import WrongAES, explode_key, xorpad
 @dataclass
 class DirectoryTree:
     nnco: int
-    b: int
+    xor: int
     c: int
     d: int
     e: int
@@ -42,10 +42,11 @@ class DirectoryTree:
 
     def __init__(self, data: bytes, rem_entries: int) -> None:
         t = struct.unpack('<i7I', data[:32])
-        self.nnco, self.b, self.c, self.d, self.e, self.f, self.g, self.h = t
+        self.nnco, self.xor, self.c, self.d, self.e, self.f, self.g, self.h = t
         self.files = []
 
         leftover = data[32:]
+        assert FileDataChunk.checkxor(leftover) == self.xor
 
         for _ in range(rem_entries):
             if len(leftover) < 512:
@@ -61,10 +62,25 @@ class DirectoryTree:
 
         assert all(b == 0 for b in leftover)
 
+    def serialize(self, chunk_size: int) -> bytes:
+        data = b''
+        for file in self.files:
+            data += file.serialize()
+
+        self.xor = FileDataChunk.checkxor(data)
+        t = self.nnco, self.xor, self.c, self.d, self.e, self.f, self.g, self.h
+        hdr = struct.pack('<i7I', *t)
+
+        data = hdr + data
+        assert len(data) <= chunk_size
+        data += b'\x00' * (chunk_size - len(data))
+        assert len(data) == chunk_size
+        return data
+
     def __repr__(self) -> str:
         return 'DirectoryTree(' + ', '.join([
             repr(self.nnco),
-            hex(self.b),
+            hex(self.xor),
             repr(self.c),
             repr(self.d),
             repr(self.e),
@@ -109,6 +125,17 @@ class FileHeader:
             # repr(self.key.hex()),
             # repr(self.other.hex()),
         ]) + ')'
+
+    def serialize(self) -> bytes:
+        fname = self.filename.encode('ascii')
+        fname += b'\x00' * (288 - len(fname))
+        timea, timeb, timec = [round(1e9 * i) for i in self.times]
+        t = (self.fo, self.size, timea, timeb, timec, self.ftype,
+             self.parent, self.poop, self.key, self.other, self.etype,
+             fname)
+        data = struct.pack('<i4QIiI32s140sI288s', *t)
+        assert len(data) == 512
+        return data
 
     def decrypt_key(self, password: bytes) -> bytes:
         cipher = WrongAES(explode_key(password))
