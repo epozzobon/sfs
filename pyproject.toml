@@ -1,0 +1,33 @@
+[build-system]
+requires = [ "setuptools>=62.0.0", "setuptools_scm>=8" ]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sfs"
+dynamic = [ "version" ]
+authors = [
+    { name="Enrico POZZOBON" },
+]
+readme = "README.md"
+requires-python = ">=3.11, <4"
+description = "Barebone Single File System (SFS) file support"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+# setuptools specific
+
+[tool.setuptools.packages.find]
+include = [
+    "sfs*",
+]
+exclude = [
+    "test*",
+]
+
+[project.scripts]
+
+[tool.setuptools_scm]
