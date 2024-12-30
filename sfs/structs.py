@@ -25,7 +25,7 @@ SOFTWARE.
 from dataclasses import dataclass
 import struct
 
-from sfs.wrongaes import WrongAES, explode_key, xorpad
+from sfs.wrongaes import explode_key, sfs_decrypt
 
 
 @dataclass
@@ -138,17 +138,9 @@ class FileHeader:
         return data
 
     def decrypt_key(self, password: bytes) -> bytes:
-        cipher = WrongAES(explode_key(password))
-        iv = cipher.encrypt_block(b'\xff' * 16)
-        blocks = [self.key[:16], self.key[16:32]]
-        for i in range(len(blocks)):
-            block = blocks[i]
-            next_iv = xorpad(block, iv)
-            block = cipher.decrypt_block(block)
-            block = xorpad(block, iv)
-            iv = next_iv
-            blocks[i] = block
-        decrypted_key = b''.join(blocks)
+        data = bytearray(self.key)
+        sfs_decrypt(data, explode_key(password))
+        decrypted_key = bytes(data)
         return explode_key(decrypted_key + b'\x00')
 
 
@@ -224,15 +216,7 @@ class FileDataChunk:
             return self.data
 
         data = bytearray(self.data)
-        cipher = WrongAES(key)
-        iv = cipher.encrypt_block(b'\xff' * 16)
-        for i in range(len(data) // 16):
-            block = bytes(data[i*16:i*16+16])
-            next_iv = xorpad(block, iv)
-            block = cipher.decrypt_block(block)
-            block = xorpad(block, iv)
-            iv = next_iv
-            data[i*16:i*16+16] = block
+        sfs_decrypt(data, key)
         return bytes(data)
 
 

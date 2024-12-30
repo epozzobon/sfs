@@ -25,7 +25,7 @@ SOFTWARE.
 import struct
 import zlib
 
-from sfs.wrongaes import WrongAES, xorpad, crc16
+from sfs.wrongaes import sfs_encrypt, crc16
 from sfs.structs import FileDataChunk
 
 
@@ -95,13 +95,7 @@ def make_chunks(data: bytes, chunk_size: int,
     for i, chunk_data in enumerate(chunks):
         if key is not None:
             datab = bytearray(chunk_data)
-            cipher = WrongAES(key)
-            iv = cipher.encrypt_block(b"\xff" * 16)
-            for j in range(len(datab) // 16):
-                pt = bytes(datab[j*16:j*16 + 16])
-                ct = cipher.encrypt_block(xorpad(pt, iv))
-                iv = xorpad(ct, iv)
-                datab[j*16:j*16 + 16] = ct
+            sfs_encrypt(datab, key)
             chunk_data = bytes(datab)
 
         xor = FileDataChunk.checkxor(chunk_data)

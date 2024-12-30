@@ -63,6 +63,26 @@ class WrongAES(AES):
         ]
 
 
+def sfs_encrypt(data: bytearray, key: bytes) -> None:
+    cipher = WrongAES(key)
+    iv = cipher.encrypt_block(b"\xff" * 16)
+    for j in range(len(data) // 16):
+        pt = bytes(data[j*16:j*16 + 16])
+        ct = cipher.encrypt_block(xorpad(pt, iv))
+        iv = xorpad(ct, iv)
+        data[j*16:j*16 + 16] = ct
+
+
+def sfs_decrypt(data: bytearray, key: bytes) -> None:
+    cipher = WrongAES(key)
+    iv = cipher.encrypt_block(b'\xff' * 16)
+    for i in range(len(data) // 16):
+        ct = bytes(data[i*16:i*16+16])
+        pt = xorpad(cipher.decrypt_block(ct), iv)
+        iv = xorpad(ct, iv)
+        data[i*16:i*16+16] = pt
+
+
 def crc16(src: bytes, start: int = 0) -> int:
     lut = [
         0x0000, 0xC0C1, 0xC181, 0x0140, 0xC301, 0x03C0, 0x0280, 0xC241,
