@@ -25,8 +25,7 @@ SOFTWARE.
 import struct
 import zlib
 
-from sfs.wrongaes import sfs_encrypt, crc16
-from sfs.structs import FileDataChunk
+from sfs.wrongaes import checkxor, sfs_encrypt, crc16
 
 
 def aacs_inflate(data: bytes) -> bytes:
@@ -98,7 +97,7 @@ def make_chunks(data: bytes, chunk_size: int,
             sfs_encrypt(datab, key)
             chunk_data = bytes(datab)
 
-        xor = FileDataChunk.checkxor(chunk_data)
+        xor = checkxor(chunk_data)
         flags = 6 if key is None else 0x106
         chunk_hdr = struct.pack("<iII20s", -1, xor, flags, b"\x00" * 20)
         chunks[i] = chunk_hdr + chunk_data

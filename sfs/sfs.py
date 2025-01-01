@@ -24,7 +24,6 @@ SOFTWARE.
 
 from io import BufferedReader
 import os
-import sys
 from typing import Iterator
 from sfs.structs import (Header, DirectoryTree, FileChunk, FileHeader,
                          FileDataChunk)
@@ -50,10 +49,10 @@ class SFSContainer:
             assert chk_idx not in used_chunks
             used_chunks.add(chk_idx)
             for f in dt.files:
-                if f.fo == -1:
+                if f.offset == -1:
                     continue
-                assert f.fo not in used_chunks
-                used_chunks.add(f.fo)
+                assert f.offset not in used_chunks
+                used_chunks.add(f.offset)
                 fc, _ = self.get_file(f)
                 for idx in fc.dchunks:
                     assert idx not in used_chunks
@@ -87,7 +86,7 @@ class SFSContainer:
             yield dt
 
     def enumerate_tree(self) -> Iterator[tuple[int, DirectoryTree]]:
-        nco = self._hdr.dto
+        nco = self._hdr.tree_offset
         rem_entries = self._hdr.n_entr
         while 1:
             chunk = self._get_chunk(nco)
@@ -95,9 +94,9 @@ class SFSContainer:
             rem_entries -= len(dt.files)
             assert rem_entries >= 0
             yield nco, dt
-            if rem_entries == 0 or nco == dt.nnco or dt.nnco <= 0:
+            if rem_entries == 0 or nco == dt.next_chunk or dt.next_chunk <= 0:
                 break
-            nco = dt.nnco
+            nco = dt.next_chunk
 
     def write_file(self, file: FileHeader, data: bytes,
                    password: None | bytes = None,
@@ -111,7 +110,7 @@ class SFSContainer:
 
         for chunk_idx, dt in self.enumerate_tree():
             for f in dt.files:
-                if f.filename == file.filename:
+                if f == file:
                     # must rewrite this directorytree with the updated size
                     f.size = len(data)
                     b = dt.serialize(self._hdr.chunk_size)
@@ -119,7 +118,7 @@ class SFSContainer:
 
         chunks = make_chunks(data, self._hdr.chunk_size, key)
 
-        file_chunk = FileChunk(self._get_chunk(file.fo))
+        file_chunk = FileChunk(self._get_chunk(file.offset))
         if len(chunks) > len(file_chunk.dchunks):
             # TODO: allocate new chunks
             raise NotImplementedError()
@@ -136,7 +135,7 @@ class SFSContainer:
 
     def read_file(self, file: FileHeader,
                   password: None | bytes = None) -> bytes:
-        if file.fo == -1:
+        if file.offset == -1:
             return b''
         _, chunks = self.get_file(file)
 
@@ -157,9 +156,9 @@ class SFSContainer:
 
     def get_file(self, file: FileHeader
                  ) -> tuple[FileChunk, Iterator[FileDataChunk]]:
-        assert file.fo != -1
+        assert file.offset != -1
 
-        chunk = self._get_chunk(file.fo)
+        chunk = self._get_chunk(file.offset)
         fc = FileChunk(chunk)
 
         def iterator() -> Iterator[FileDataChunk]:

@@ -40,6 +40,30 @@ def test_sfs_with_compressed_file() -> None:
             assert d.hex() == HASHES[f.filename], data
 
 
+def test_sfs_with_directories() -> None:
+    path = asset('directory_example.sfs')
+    HASHES = {
+        'directory': 'd41d8cd98f00b204e9800998ecf8427e',
+        'subdirectory': 'd41d8cd98f00b204e9800998ecf8427e',
+        'emptydir': 'd41d8cd98f00b204e9800998ecf8427e',
+        'small.txt': '0b2b084a372b384bc1db6f537a382dbd',
+        'sfsmanager.ini': '2be0a1cab5adcf94dbd4a202ac510986',
+        'photo.jpg.bak': 'd41d8cd98f00b204e9800998ecf8427e',
+        'photo.jpg': 'ecae485ada3b52e2bacf171e92877bbe',
+        'another_file.txt': '9a531acf108c75f2c4085d2fe8a38f78',
+        'LayoutDef.lyd': '8bfa9d517eb0e070beca01f4cc56bbce',
+        'ce.png': '1052dd594365a75895a01cc0165c15a6',
+        'file.txt': '9a531acf108c75f2c4085d2fe8a38f78',
+        'Screenshot 2024-09-23 102849.png': 'e295f5c4836b0fc96fcf44af8942a126',
+    }
+    sfs = SFSContainer(open(path, 'rb'))
+    for dt in sfs.get_tree():
+        for f in dt.files:
+            data = sfs.read_file(f, b'lol')
+            d = hashlib.md5(data, usedforsecurity=False).digest()
+            assert d.hex() == HASHES[f.filename], data
+
+
 def test_sfs_replace_file() -> None:
     pat0 = asset('ugly_label.stc')
     pat1 = asset('ugly_label_copy.stc')
@@ -113,7 +137,7 @@ def test_sfs_extract() -> None:
         print(f'    {dt}')
         for f in dt.files:
             print(f'        {f}')
-            if f.fo != -1:
+            if f.offset != -1:
                 fc, dcs = sfs.get_file(f)
                 print(f'        {fc}')
                 for dc in dcs:

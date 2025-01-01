@@ -24,13 +24,14 @@ SOFTWARE.
 
 from dataclasses import dataclass
 import struct
+from typing import Any
 
-from sfs.wrongaes import explode_key, sfs_decrypt
+from sfs.wrongaes import explode_key, sfs_decrypt, checkxor
 
 
-@dataclass
+@dataclass(slots=True, init=False)
 class DirectoryTree:
-    nnco: int
+    next_chunk: int
     xor: int
     c: int
     d: int
@@ -41,12 +42,12 @@ class DirectoryTree:
     files: list['FileHeader']
 
     def __init__(self, data: bytes, rem_entries: int) -> None:
-        t = struct.unpack('<i7I', data[:32])
-        self.nnco, self.xor, self.c, self.d, self.e, self.f, self.g, self.h = t
+        (self.next_chunk, self.xor, self.c, self.d, self.e, self.f, self.g,
+         self.h) = struct.unpack('<i7I', data[:32])
         self.files = []
 
         leftover = data[32:]
-        assert FileDataChunk.checkxor(leftover) == self.xor
+        assert checkxor(leftover) == self.xor
 
         for _ in range(rem_entries):
             if len(leftover) < 512:
@@ -67,9 +68,9 @@ class DirectoryTree:
         for file in self.files:
             data += file.serialize()
 
-        self.xor = FileDataChunk.checkxor(data)
-        t = self.nnco, self.xor, self.c, self.d, self.e, self.f, self.g, self.h
-        hdr = struct.pack('<i7I', *t)
+        self.xor = checkxor(data)
+        hdr = struct.pack('<i7I', self.next_chunk, self.xor, self.c, self.d,
+                          self.e, self.f, self.g, self.h)
 
         data = hdr + data
         assert len(data) <= chunk_size
@@ -79,7 +80,7 @@ class DirectoryTree:
 
     def __repr__(self) -> str:
         return 'DirectoryTree(' + ', '.join([
-            repr(self.nnco),
+            repr(self.next_chunk),
             hex(self.xor),
             repr(self.c),
             repr(self.d),
@@ -90,48 +91,65 @@ class DirectoryTree:
         ]) + ')'
 
 
-@dataclass
+@dataclass(slots=True, init=False)
 class FileHeader:
-    filename: str
-    fo: int
+    offset: int
     size: int
     times: tuple[int, int, int]
     ftype: int
     parent: int
-    other: bytes
-    etype: int
-    poop: int
+    zero: int
     key: bytes
+    unknown: bytes
+    etype: int
+    filename: str
 
     def __init__(self, data: bytes) -> None:
         assert len(data) == 512
         t = struct.unpack('<i4QIiI32s140sI288s', data)
-        (self.fo, self.size, timea, timeb, timec, self.ftype,
-         self.parent, self.poop, self.key, self.other, self.etype,
+        (self.offset, self.size, timea, timeb, timec, self.ftype,
+         self.parent, self.zero, self.key, self.unknown, self.etype,
          fname) = t
         self.times = timea/1e9, timeb/1e9, timec/1e9
         self.filename = fname.decode('ascii').strip('\x00')
+        assert self.zero == 0
+
+    def __eq__(self, other: Any) -> bool:
+        if not isinstance(other, FileHeader):
+            return False
+        return (
+            self.filename == other.filename and
+            self.offset == other.offset and
+            self.size == other.size and
+            self.times == other.times and
+            self.ftype == other.ftype and
+            self.parent == other.parent and
+            self.unknown == other.unknown and
+            self.etype == other.etype and
+            self.zero == other.zero and
+            self.key == other.key
+        )
 
     def __repr__(self) -> str:
         return 'FileHeader(' + ', '.join([
             repr(self.filename),
-            repr(self.fo),
+            repr(self.offset),
             repr(self.size),
             repr(self.times),
             repr(self.ftype),
             repr(self.parent),
-            repr(self.poop),
+            repr(self.zero),
             repr(self.etype),
             # repr(self.key.hex()),
-            # repr(self.other.hex()),
+            # repr(self.unknown.hex()),
         ]) + ')'
 
     def serialize(self) -> bytes:
         fname = self.filename.encode('ascii')
         fname += b'\x00' * (288 - len(fname))
         timea, timeb, timec = [round(1e9 * i) for i in self.times]
-        t = (self.fo, self.size, timea, timeb, timec, self.ftype,
-             self.parent, self.poop, self.key, self.other, self.etype,
+        t = (self.offset, self.size, timea, timeb, timec, self.ftype,
+             self.parent, self.zero, self.key, self.unknown, self.etype,
              fname)
         data = struct.pack('<i4QIiI32s140sI288s', *t)
         assert len(data) == 512
@@ -144,9 +162,9 @@ class FileHeader:
         return explode_key(decrypted_key + b'\x00')
 
 
-@dataclass
+@dataclass(slots=True, init=False)
 class FileChunk:
-    nfo: int
+    next_chunk: int
     i: int
     j: int
     k: int
@@ -159,9 +177,11 @@ class FileChunk:
     def __init__(self, data: bytes) -> None:
         assert len(data) >= 36
         assert len(data) % 4 == 0
-        t = struct.unpack('<iIIIIIII', data[:32])
         self.dchunks = []
-        self.nfo, self.i, self.j, self.k, self.l, self.m, self.n, self.o = t
+        (self.next_chunk, self.i, self.j, self.k, self.l, self.m, self.n,
+         self.o) = struct.unpack('<iIIIIIII', data[:32])
+        if self.next_chunk != -1:
+            raise NotImplementedError()
         data = data[32:]
         for i in range(0, len(data), 4):
             fdco, = struct.unpack('<i', data[i:i+4])
@@ -170,7 +190,7 @@ class FileChunk:
 
     def __repr__(self) -> str:
         return 'FileChunk(' + ', '.join([
-            repr(self.nfo),
+            repr(self.next_chunk),
             repr(self.i),
             repr(self.j),
             repr(self.k),
@@ -182,27 +202,20 @@ class FileChunk:
         ]) + ')'
 
 
-@dataclass
+@dataclass(slots=True, init=False)
 class FileDataChunk:
+    q: int
     xor: int
-    r: int
     flags: int
+    unknown: bytes
     data: bytes
-    pad: bytes
 
     def __init__(self, data: bytes) -> None:
         assert len(data) > 32
         self.data = data[32:]
-        self.q, self.xor, self.flags, self.pad = struct.unpack(
+        self.q, self.xor, self.flags, self.unknown = struct.unpack(
             '<iII20s', data[:32])
-        assert FileDataChunk.checkxor(self.data) == self.xor
-
-    @staticmethod
-    def checkxor(data: bytes) -> int:
-        x = 0
-        for b in struct.unpack(f'{len(data)//4}I', data):
-            x ^= b
-        return x
+        assert checkxor(self.data) == self.xor
 
     def __repr__(self) -> str:
         return 'FileDataChunk(' + ', '.join([
@@ -220,9 +233,9 @@ class FileDataChunk:
         return bytes(data)
 
 
-@dataclass
+@dataclass(slots=True, init=False)
 class Header:
-    pad: bytes
+    unknown: bytes
     csc: int
     oof: int
     chunk_size: int
@@ -231,17 +244,18 @@ class Header:
     c: int
     d: int
     e: int
-    dto: int
+    tree_offset: int
     n_entr: int
+    n_chunks: int
     key: bytes
 
     def __init__(self, data: bytes) -> None:
         assert len(data) == 364
 
         t = struct.unpack('<8s272s8sIIIIIIIIIII32s', data)
-        (magic, self.pad, magic2, self.csc, self.oof, self.chunk_size,
-         self.a, self.b, self.c, self.d, self.e,
-         self.dto, self.n_entr, self.n_chunks, self.key) = t
+        (magic, self.unknown, magic2, self.csc, self.oof, self.chunk_size,
+         self.a, self.b, self.c, self.d, self.e, self.tree_offset,
+         self.n_entr, self.n_chunks, self.key) = t
 
         assert magic == b'AAMVHFSS'
         assert magic2 == b'AASFSSGN'

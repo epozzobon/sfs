@@ -198,3 +198,10 @@ def spiceup(rawkey: bytes) -> bytes:
 def xorpad(a: bytes, b: bytes) -> bytes:
     assert len(a) == len(b)
     return bytes(i ^ j for i, j in zip(a, b))
+
+
+def checkxor(data: bytes) -> int:
+    x = 0
+    for b in struct.unpack(f'{len(data)//4}I', data):
+        x ^= b
+    return x
