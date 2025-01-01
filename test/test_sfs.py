@@ -3,9 +3,12 @@ import os.path
 import hashlib
 
 
+def asset(filename: str) -> str:
+    return os.path.join(*os.path.split(__file__)[:-1], 'assets', filename)
+
+
 def test_sfs_with_encrypted_file() -> None:
-    path = os.path.join(*os.path.split(__file__)[:-1], 'assets',
-                        'encrypted_example.sfs')
+    path = asset('encrypted_example.sfs')
     HASHES = {
         'small.txt': '0b2b084a372b384bc1db6f537a382dbd',
         'photo.jpg': 'ecae485ada3b52e2bacf171e92877bbe',
@@ -20,8 +23,7 @@ def test_sfs_with_encrypted_file() -> None:
 
 
 def test_sfs_with_compressed_file() -> None:
-    path = os.path.join(*os.path.split(__file__)[:-1], 'assets',
-                        'compressed_example.sfs')
+    path = asset('compressed_example.sfs')
     HASHES = {
         'small.txt': '0b2b084a372b384bc1db6f537a382dbd',
         'sfsmanager.ini': '2be0a1cab5adcf94dbd4a202ac510986',
@@ -39,12 +41,9 @@ def test_sfs_with_compressed_file() -> None:
 
 
 def test_sfs_replace_file() -> None:
-    pat0 = os.path.join(*os.path.split(__file__)[:-1], 'assets',
-                        'ugly_label.stc')
-    pat1 = os.path.join(*os.path.split(__file__)[:-1], 'assets',
-                        'ugly_label_copy.stc')
-    pat2 = os.path.join(*os.path.split(__file__)[:-1], 'assets',
-                        'LayoutDef.lyd')
+    pat0 = asset('ugly_label.stc')
+    pat1 = asset('ugly_label_copy.stc')
+    pat2 = asset('LayoutDef.lyd')
     with open(pat0, 'rb') as src:
         with open(pat1, 'wb') as dst:
             dst.write(src.read())
@@ -62,9 +61,32 @@ def test_sfs_replace_file() -> None:
     os.unlink(pat1)
 
 
+def test_sfs_truncate() -> None:
+    pat0 = asset('encrypted_example.sfs')
+    pat1 = asset('encrypted_example_copy.sfs')
+    with open(pat0, 'rb') as src:
+        with open(pat1, 'wb') as dst:
+            dst.write(src.read())
+
+    with open(pat1, 'rb+') as fd:
+        sfs = SFSContainer(fd)
+        sfs.truncate()
+    with open(pat1, 'rb') as fd:
+        d = hashlib.md5(fd.read(), usedforsecurity=False).digest()
+    assert d.hex() == '08ef56636eb19a72f336a7a4adc82e0c'
+
+    with open(pat1, 'rb+') as fd:
+        sfs = SFSContainer(fd)
+        sfs.truncate()
+    with open(pat1, 'rb') as fd:
+        d = hashlib.md5(fd.read(), usedforsecurity=False).digest()
+    assert d.hex() == '08ef56636eb19a72f336a7a4adc82e0c'
+
+    os.unlink(pat1)
+
+
 def test_sfs_from_label() -> None:
-    path = os.path.join(*os.path.split(__file__)[:-1], 'assets',
-                        'ugly_label.stc')
+    path = asset('ugly_label.stc')
     HASHES = {
         'Layout.ini': 'd41d8cd98f00b204e9800998ecf8427e',
         'LayoutDef.lyd': 'd2d878b756be022550e95439bb615a8d',
@@ -84,8 +106,7 @@ def test_sfs_from_label() -> None:
 
 
 def test_sfs_extract() -> None:
-    path = os.path.join(*os.path.split(__file__)[:-1], 'assets',
-                        'ugly_label.stc')
+    path = asset('ugly_label.stc')
     sfs = SFSContainer(open(path, 'rb'))
     print(sfs._hdr)
     for dt in sfs.get_tree():

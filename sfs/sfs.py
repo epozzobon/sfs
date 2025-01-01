@@ -23,6 +23,7 @@ SOFTWARE.
 """
 
 from io import BufferedReader
+import os
 import sys
 from typing import Iterator
 from sfs.structs import (Header, DirectoryTree, FileChunk, FileHeader,
@@ -37,6 +38,28 @@ class SFSContainer:
         self._hdr = Header(hdrbytes)
         if self._hdr.chunk_size != 4096:
             raise NotImplementedError()
+        self._empty_chunks: set[int] = set()
+        self._last_chunk = -1
+
+    def _refresh_empty_chunks(self) -> None:
+        last_byte = self.fd.seek(0, 2)
+        assert 0 == (last_byte - 280) % self._hdr.chunk_size
+        self._last_chunk = (last_byte - 280) // self._hdr.chunk_size
+        used_chunks = {0, 1, 2, 3}
+        for chk_idx, dt in self.enumerate_tree():
+            assert chk_idx not in used_chunks
+            used_chunks.add(chk_idx)
+            for f in dt.files:
+                if f.fo == -1:
+                    continue
+                assert f.fo not in used_chunks
+                used_chunks.add(f.fo)
+                fc, _ = self.get_file(f)
+                for idx in fc.dchunks:
+                    assert idx not in used_chunks
+                    used_chunks.add(idx)
+        self._empty_chunks = set(range(self._last_chunk)
+                                 ).difference(used_chunks)
 
     def _get_chunk(self, c: int) -> bytes:
         if c <= 0:
@@ -104,9 +127,8 @@ class SFSContainer:
         if len(chunks) < len(file_chunk.dchunks):
             unused_chunks = file_chunk.dchunks[len(chunks):]
             file_chunk.dchunks = file_chunk.dchunks[:len(chunks)]
-            # TODO: recycle unused chunks
-            print(f'(SFS) WARNING: orphaned chunks: {unused_chunks}',
-                  file=sys.stderr)
+            for c in unused_chunks:
+                self._empty_chunks.add(c)
 
         for i, chunk in enumerate(chunks):
             idx = file_chunk.dchunks[i]
@@ -145,3 +167,11 @@ class SFSContainer:
                 chunk = self._get_chunk(fdco)
                 yield FileDataChunk(chunk)
         return fc, iterator()
+
+    def truncate(self) -> None:
+        self._refresh_empty_chunks()
+        while (self._last_chunk - 1) in self._empty_chunks:
+            self._last_chunk -= 1
+            self._empty_chunks.remove(self._last_chunk)
+        os.ftruncate(self.fd.fileno(),
+                     self._last_chunk * self._hdr.chunk_size + 280)
