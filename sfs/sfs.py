@@ -49,14 +49,12 @@ class SFSContainer:
             assert chk_idx not in used_chunks
             used_chunks.add(chk_idx)
             for f in dt.files:
-                if f.offset == -1:
-                    continue
-                assert f.offset not in used_chunks
-                used_chunks.add(f.offset)
-                fc, _ = self.get_file(f)
-                for idx in fc.dchunks:
-                    assert idx not in used_chunks
-                    used_chunks.add(idx)
+                for fc_off, fc in self.enumerate_file_chunks(f):
+                    assert fc_off not in used_chunks
+                    used_chunks.add(fc_off)
+                    for idx in fc.dchunks:
+                        assert idx not in used_chunks
+                        used_chunks.add(idx)
         self._empty_chunks = set(range(self._last_chunk)
                                  ).difference(used_chunks)
 
@@ -137,7 +135,11 @@ class SFSContainer:
                   password: None | bytes = None) -> bytes:
         if file.offset == -1:
             return b''
-        _, chunks = self.get_file(file)
+        offs = sum([
+            fc.dchunks
+            for _, fc in self.enumerate_file_chunks(file)
+        ], [])
+        chunks = [FileDataChunk(self._get_chunk(i)) for i in offs]
 
         if password is not None:
             key = file.decrypt_key(password)
@@ -154,18 +156,20 @@ class SFSContainer:
 
         return data
 
-    def get_file(self, file: FileHeader
-                 ) -> tuple[FileChunk, Iterator[FileDataChunk]]:
-        assert file.offset != -1
+    def enumerate_file_chunks(self, file: FileHeader
+                              ) -> Iterator[tuple[int, FileChunk]]:
+        next_chunk = file.offset
+        while next_chunk != -1:
+            chunk = self._get_chunk(next_chunk)
+            fc = FileChunk(chunk)
+            yield next_chunk, fc
+            next_chunk = fc.next_chunk
 
-        chunk = self._get_chunk(file.offset)
-        fc = FileChunk(chunk)
-
-        def iterator() -> Iterator[FileDataChunk]:
-            for fdco in fc.dchunks:
-                chunk = self._get_chunk(fdco)
-                yield FileDataChunk(chunk)
-        return fc, iterator()
+    def _get_file_data_chunks(self, fc: FileChunk
+                              ) -> Iterator[FileDataChunk]:
+        for fdco in fc.dchunks:
+            chunk = self._get_chunk(fdco)
+            yield FileDataChunk(chunk)
 
     def truncate(self) -> None:
         self._refresh_empty_chunks()

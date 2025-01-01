@@ -180,8 +180,6 @@ class FileChunk:
         self.dchunks = []
         (self.next_chunk, self.i, self.j, self.k, self.l, self.m, self.n,
          self.o) = struct.unpack('<iIIIIIII', data[:32])
-        if self.next_chunk != -1:
-            raise NotImplementedError()
         data = data[32:]
         for i in range(0, len(data), 4):
             fdco, = struct.unpack('<i', data[i:i+4])

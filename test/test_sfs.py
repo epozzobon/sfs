@@ -22,6 +22,20 @@ def test_sfs_with_encrypted_file() -> None:
             assert d.hex() == HASHES[f.filename], data
 
 
+def test_sfs_big_file() -> None:
+    path = asset('bigfile_example.sfs')
+    HASHES = {
+        'small.txt': '0b2b084a372b384bc1db6f537a382dbd',
+        'bigblankbitmap.bmp': '4906cf1a3553fdb6e6ebc7bf5d09012e',
+    }
+    sfs = SFSContainer(open(path, 'rb'))
+    for dt in sfs.get_tree():
+        for f in dt.files:
+            data = sfs.read_file(f, b'lol')
+            d = hashlib.md5(data, usedforsecurity=False).digest()
+            assert d.hex() == HASHES[f.filename], data
+
+
 def test_sfs_with_compressed_file() -> None:
     path = asset('compressed_example.sfs')
     HASHES = {
@@ -138,10 +152,10 @@ def test_sfs_extract() -> None:
         for f in dt.files:
             print(f'        {f}')
             if f.offset != -1:
-                fc, dcs = sfs.get_file(f)
-                print(f'        {fc}')
-                for dc in dcs:
-                    print(f'            {dc}')
+                for _, fc in sfs.enumerate_file_chunks(f):
+                    print(f'        {fc}')
+                    for dc in sfs._get_file_data_chunks(fc):
+                        print(f'            {dc}')
             data = sfs.read_file(f, b'45654hKL5-GFD1326lvmaQQ')
             with open('outputs/' + f.filename, 'wb') as fd:
                 fd.write(data)
