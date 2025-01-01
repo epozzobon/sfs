@@ -157,5 +157,6 @@ def test_sfs_extract() -> None:
                     for dc in sfs._get_file_data_chunks(fc):
                         print(f'            {dc}')
             data = sfs.read_file(f, b'45654hKL5-GFD1326lvmaQQ')
+            os.makedirs('outputs', exist_ok=True)
             with open('outputs/' + f.filename, 'wb') as fd:
                 fd.write(data)
